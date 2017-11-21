@@ -7,11 +7,47 @@
 # TODO: Have script search for:
 #	-> i) clear text passwords (for accounts, for wifi, etc.)
 #	-> ii) hashes of passwords (for use with hash-based attacks)
+#	-> iii) create a function to search each locaiton to create Password, SSID, Username files
 ######
 
+## Configuration of Script Variables ##
 dbg=0
 passwordDumpFile="PasswordSlurp.txt"
 ssidDumpFile="SSIDSlurp.txt"
+
+## Function Definitions for Script ##
+# -------
+#  printguiltyFiles: Take in an array of files and prints them out one line at a time to stdout
+#
+#  Input: Array of filenames
+#  Output: None
+# -------
+function printGuiltyFiles() {
+	arr=("$@")	# Create array from the 'list'/array of inputs passed to the function
+	echo "The Guilty files are..."
+	printf '=%.0s' {1..100}			# Prints to a set format '=%.0s' which means it will always print a single character of '=' no matter what argument is given \
+	printf '\n'				#	Note: The '{1..100}' does a bash expansion to '1 2 3 4 .. 99 100'
+	printf '%s\n' "${arr[@]}"	# Prints out each file in the array on a new line (Note: Adding a \t to the front only affected the first line)
+	printf '=%.0s' {1..100}			# Recreate the border around the found files
+	printf '\n'
+}
+
+# -------
+#  testGuiltyGranb: Take in an array of files and prints out the structure to test all is formatted correctly
+#
+#  Input: Array of filenames
+#  Output: None
+# -------
+function testGuiltyGrab() {
+	arr=("$@")	# Create array from the 'list'/array of inputs passed to the function
+	lengthArr=${#arr[@]}
+	echo "Printing the contents of 'guiltyFiles'..."
+	echo ${arr[@]}
+	echo -e "\tLooping through filenames"
+	for (( i=0; i<${lengthArr}; i++ )); do
+		echo -e "\t\t($i) ${arr[$i]}"
+	done
+}
 
 echo "Welcome to the 'passwordSearch.sh' script tool"
 echo -e "\tThis is the splash screen for the start-up of the tool"
@@ -42,29 +78,21 @@ guiltyFiles=($(grep -rnwl '/etc/netctl/' -e 'Key' | uniq))	# Prints list of file
 # Note: The use of outer '(..)' to create and array and not a single object with a list of files
 IFS="$OIFS"				# Resets the Internal Field Separator back to the old (stored) one
 
-echo "The Guilty files are..."
-printf '=%.0s' {1..100}			# Prints to a set format '=%.0s' which means it will always print a single character of '=' no matter what argument is given \
-printf '\n'				#	Note: The '{1..100}' does a bash expansion to '1 2 3 4 .. 99 100'
-printf '%s\n' "${guiltyFiles[@]}"	# Prints out each file in the array on a new line (Note: Adding a \t to the front only affected the first line)
-printf '=%.0s' {1..100}			# Recreate the border around the found files
-printf '\n'
+printGuiltyFiles "${guiltyFiles[@]}"
 
 # Collect a set of SSIDs and Passwords for each file
 declare -a SSIDs
 declare -a Passwords
+declare -a Usernames
 lengthGF=${#guiltyFiles[@]}
 
 # Testing file grab for completeness (e.g. complete file name, including spaces, are captured)
 if [ "$dbg" -ne 0 ]; then
-	echo "Printing the contents of 'guiltyFiles'..."
-	echo ${guiltyFiles[@]}
-	echo -e "\tLooping through filenames"
-	for (( i=0; i<${lengthGF}; i++ )); do
-		echo -e "\t\t($i) ${guiltyFiles[$i]}"
-	done
+	testGuiltyGrab "${guiltyFiles[@]}"
 fi
 
-# Collecting the SSIDs and Passwords
+## Collecting the SSIDs and Passwords
+# Collect from /etc/netctl
 for (( i=0; i<${lengthGF}; i++ )); do
 #for i in "${guiltyFiles[@]}"; do	# Attempt to interate through the contents of the array | Note: Gives issue to not being able to handle filename with spaces
 	if [ "$dbg" -ne 0 ]; then
@@ -85,3 +113,45 @@ done
 echo -e "Number of ESSIDs Collected: ${#SSIDs[@]}"
 echo -e "Number of Passwords Collected: ${#Passwords[@]}"
 
+# Note: Important information is sotred is fields:
+#	-> i) 'ssid'
+#	-> ii) 'psk'
+#	-> iii) 'password'
+#	-> iv) 'identity' (e.g. username)
+#	-> v) 'ESSID'
+# Nota Bene: Some will have 'key_mgmt=NONE' meaning that it is an open wireless
+OIFS="$IFS"				# Stores the old Internal Field Seperator
+IFS=$'\n'				# Sets the new Internal Field Separator to a '\n' (newline) character
+# Capture ALL variabltions of files, THEN create a unique list
+declare -a searchTerms=("ssid" "psk" "password" "identity" "ESSID")
+guiltyFiles=()	# Clear back out the guiltyFiles array
+for i in "${searchTerms[@]}"		# Loop through the elements of the array (e.g. search terms for grep)
+do
+	guiltyGrab=($(grep -rnwl '/etc/wpa_supplicant/' -e "$i" | uniq))	# Prints list of files that has passwords in it	| ~!~ TEST: Could be due to OIFS/IFS
+	guiltyFiles=( "${guiltyFiles[@]}" "${guiltyGrab[@]}" )
+done
+# Note: The use of outer '(..)' to create and array and not a single object with a list of files
+IFS="$OIFS"				# Resets the Internal Field Separator back to the old (stored) one
+
+# Print by line, sort, and remove duplicates from collected filenames
+guiltyFiles=( "$(printf "%s\n" "${guiltyFiles[@]}" | sort | uniq)" )
+printGuiltyFiles "${guiltyFiles[@]}"
+lengthGF=${#guiltyFiles[@]}
+
+# Testing file grab for completeness (e.g. complete file name, including spaces, are captured)
+if [ "$dbg" -ne 1 ]; then
+	testGuiltyGrab "${guiltyFiles[@]}"
+fi
+
+## Collecting the SSIDs, Passwords, and Usernames
+# Collect from /etc/wpa_supplicant
+for (( i=0; i<${lengthGF}; i++ )); do
+	if [ "$dbg" -ne 0 ]; then
+		echo "File location: ${guiltyFiles[$i]}"
+	fi
+	tmpSSID=$(grep -rnw "${guiltyFiles[$i]}" -e 'ssid' | cut -d'=' -f 2)
+	tmpESSID=$(grep -rnw "${guiltyFiles[$i]}" -e 'ESSID' | cut -d'=' -f 2)
+	if [ "$dbg" -ne 0 ]; then
+		echo -e "-=====-\n\tSSID: $tmpSSID\n\tESSID: $tmpESSID"
+	fi
+done
