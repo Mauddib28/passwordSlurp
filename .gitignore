@@ -1,3 +1,4 @@
 # Avoid grabbing these files:
 PasswordSlurp.txt
 SSIDSlurp.txt
+IdentitySlurp.txt
