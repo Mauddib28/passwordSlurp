@@ -14,6 +14,11 @@
 dbg=0
 passwordDumpFile="PasswordSlurp.txt"
 ssidDumpFile="SSIDSlurp.txt"
+# Declaring Arrays 
+declare -a SSIDs
+declare -a Passwords
+declare -a Usernames
+declare -a searchTerms=("ssid" "psk" "password" "identity" "ESSID")
 
 ## Function Definitions for Script ##
 # -------
@@ -49,6 +54,23 @@ function testGuiltyGrab() {
 	done
 }
 
+# -------
+#  grabGuiltyFiles: Take in a directory space and search that directory for sensitive information (using the set 'searchTerms')
+#
+#  Input: Directory to search
+#  Output: List of filenames that contain sensitive informaiton strings (e.g. 'searchTerms')
+# -------
+function grabGuiltyFiles() {
+	searchDir=$1	# Grab the first passed variable to be the directory to be searched
+	# Check that the directory to be search actually exists
+	if [ ! -d "$searchDir" ]; then	# If the directory does NOT exist
+		# Function returns 0 if there was no folder to search
+		return 0	# What to do if the directory does NOT exist
+	else				# If the directory does exist
+		echo "Fuck dis shit YO!"
+	fi
+}
+
 echo "Welcome to the 'passwordSearch.sh' script tool"
 echo -e "\tThis is the splash screen for the start-up of the tool"
 
@@ -81,9 +103,6 @@ IFS="$OIFS"				# Resets the Internal Field Separator back to the old (stored) on
 printGuiltyFiles "${guiltyFiles[@]}"
 
 # Collect a set of SSIDs and Passwords for each file
-declare -a SSIDs
-declare -a Passwords
-declare -a Usernames
 lengthGF=${#guiltyFiles[@]}
 
 # Testing file grab for completeness (e.g. complete file name, including spaces, are captured)
@@ -123,7 +142,7 @@ echo -e "Number of Passwords Collected: ${#Passwords[@]}"
 OIFS="$IFS"				# Stores the old Internal Field Seperator
 IFS=$'\n'				# Sets the new Internal Field Separator to a '\n' (newline) character
 # Capture ALL variabltions of files, THEN create a unique list
-declare -a searchTerms=("ssid" "psk" "password" "identity" "ESSID")
+# TODO: Turn this section of code into a function
 guiltyFiles=()	# Clear back out the guiltyFiles array
 for i in "${searchTerms[@]}"		# Loop through the elements of the array (e.g. search terms for grep)
 do
@@ -133,13 +152,15 @@ done
 # Note: The use of outer '(..)' to create and array and not a single object with a list of files
 IFS="$OIFS"				# Resets the Internal Field Separator back to the old (stored) one
 
+grabGuiltyFiles '/etc/wpa_supplicant/'	# Works to call search function on a given directory
+
 # Print by line, sort, and remove duplicates from collected filenames
-guiltyFiles=( "$(printf "%s\n" "${guiltyFiles[@]}" | sort | uniq)" )
+guiltyFiles=($(printf "%s\n" "${guiltyFiles[@]}" | sort | uniq))	# Note: Do NOT use the array append technique to create an interable list of filenames (e.g. do ($(...)) instead)
 printGuiltyFiles "${guiltyFiles[@]}"
 lengthGF=${#guiltyFiles[@]}
 
 # Testing file grab for completeness (e.g. complete file name, including spaces, are captured)
-if [ "$dbg" -ne 1 ]; then
+if [ "$dbg" -ne 0 ]; then
 	testGuiltyGrab "${guiltyFiles[@]}"
 fi
 
@@ -151,7 +172,13 @@ for (( i=0; i<${lengthGF}; i++ )); do
 	fi
 	tmpSSID=$(grep -rnw "${guiltyFiles[$i]}" -e 'ssid' | cut -d'=' -f 2)
 	tmpESSID=$(grep -rnw "${guiltyFiles[$i]}" -e 'ESSID' | cut -d'=' -f 2)
+	tmpPSK=$(grep -rnw "${guiltyFiles[$i]}" -e 'psk' | cut -d'=' -f 2)
+	tmpPass=$(grep -rnw "${guiltyFiles[$i]}" -e 'password' | cut -d'=' -f 2)
+	tmpIden=$(grep -rnw "${guiltyFiles[$i]}" -e 'identity' | cut -d'=' -f 2)
 	if [ "$dbg" -ne 0 ]; then
-		echo -e "-=====-\n\tSSID: $tmpSSID\n\tESSID: $tmpESSID"
+		echo -e "-=====-\n\tSSID: $tmpSSID\n\tESSID: $tmpESSID\n\tPSK: $tmpPSK\n\tPassword: $tmpPass\n\tIdentity: $tmpIden\n-====-"
 	fi
+	# Nota Bene: Two methods of collection here
+	#	-> I) General Collection - No Regard to Pairing of Information
+	#	-> II) Paired Collection - Maintain Pairing of Information
 done
