@@ -141,9 +141,9 @@ function searchGuiltyFiles() {
 			Passwords=( "${Passwords[@]}" "$__tmpPass" )
 		fi
 		## Dump the found data into local files
-		echo "$tmpSSID" >> $ssidDumpFile
-		echo "$tmpPass" >> $passwordDumpFile
-		echo "$tmpIden" >> $identDumpFile
+		echo "$__tmpSSID" >> $ssidDumpFile
+		echo "$__tmpPass" >> $passwordDumpFile
+		echo "$__tmpIden" >> $identDumpFile
 	done
 }
 
